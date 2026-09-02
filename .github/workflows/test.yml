@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  workflow_call:
+
+# Callers must grant contents: read.
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Check that go.mod and go.sum are tidy
+        run: go mod tidy && git diff --exit-code go.mod go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race -shuffle on ./...
