@@ -171,3 +171,45 @@ The six files' header comments are one sentence each and otherwise the files con
 ### Future work
 
 Issues #4 (Ubuntu 26.04 runners) and #5 (Go version policy for CI).
+
+## Step 5: Add `-race`
+
+**Author:** main
+
+### Prompt Context
+
+**Verbatim prompt:** "Should we add a -race flag to the tests? Any downsides?" then "add now"
+**Interpretation:** Enable the race detector in the shared test and compatibility workflows as part of PR #3.
+**Inferred intent:** A shared default is the cheapest place to raise the bar for every repository at once.
+
+### What I did
+
+Changed `go test -shuffle on ./...` to `go test -race -shuffle on ./...` in `/.github/workflows/test.yml` and `/.github/workflows/compatibility.yml`; added a bullet to `/docs/decisions.md`. Discussed downsides with Markus: slower and more memory (minor for network-bound suites, noticeable for pure-Go libraries), detection limited to exercised paths, and latent races in converting repositories showing up as new failures.
+
+### Why
+
+None of the 24 surveyed repositories ran the race detector; a zero-input shared workflow is exactly where such a default belongs, since it applies everywhere on the next run.
+
+### What worked
+
+The question arrived while the PR was still open, so the change is one line per file rather than a second PR.
+
+### What didn't work
+
+Nothing failed.
+
+### What I learned
+
+Nothing new.
+
+### What was tricky
+
+Nothing.
+
+### What warrants review
+
+The two `go test` lines; gai's inline test job is unchanged and does not use `-race`.
+
+### Future work
+
+Consider `-race` for gai's inline test job when its secrets story is settled.
