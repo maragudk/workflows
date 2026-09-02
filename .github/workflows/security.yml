@@ -2,11 +2,6 @@ name: Security
 
 on:
   workflow_call:
-    inputs:
-      go-version:
-        description: "Go version passed to actions/setup-go, for example 'stable' or '1.25.x'."
-        type: string
-        default: stable
 
 # No permissions block: a called workflow that requests more than the caller's
 # effective grant fails validation outright, which would break fork pull requests.
@@ -23,7 +18,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ inputs.go-version }}
+          go-version: stable
           check-latest: true
 
       - id: govulncheck

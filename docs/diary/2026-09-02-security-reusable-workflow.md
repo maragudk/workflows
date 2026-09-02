@@ -153,3 +153,45 @@ I also diffed `/.github/dependabot.yml` against `glue`'s on the lead's instructi
 Re-validated after the edits. `actionlint` v1.7.12 with shellcheck 0.10.0 on `PATH` is exit 0 on both workflows and on the README's caller snippet extracted to a scratch repository. The parsed workflow now has three top-level keys (`name`, `on`, `jobs`) and one input. The stub-`gh` harness returns the same exit codes as before the edits — `0, 0, 1, 0, 0, 0, 0` across the seven cases, with the third still confirming the dedup fails closed when `gh issue list` errors.
 
 One consequence worth noting for the `gai` conversion: with the `permissions:` block removed here, the caller's block is now the *only* place permissions are declared. A caller that omits `issues: write` no longer fails loudly at validation time — it fails inside `gh` at the moment an issue needs filing, which is a red nightly rather than a red pull request, and only on the day something is actually wrong. The README bullet is the mitigation. A self-test job that exercises the workflow against a fixture module, already listed under Future work, would catch it earlier.
+
+## Step 3: Address Markus's review of PR #2
+
+**Author:** main
+
+### Prompt Context
+
+**Verbatim prompt:** `/fabrik:address-code-review`, then per comment: "Apply, and make sure all references are deleted"; "Ah. Do we even need that then? It's not like running govulncheck does anything in this repo."; "I don't think I want the action lint from an unknown third-party"; "Yes, delete entirely"; "ok"; "ok"; "a, and make the PR"; "Keep the README minimal"
+**Interpretation:** Walk the five inline review comments one at a time, then apply the agreed changes in one batch: drop the `go-version` input, delete the repo's own CI, move the caller example to a starter workflow in `maragudk/.github`, and trim the README.
+**Inferred intent:** The central repo should carry the minimum: one reusable workflow with no knobs, no third-party tooling in the repo every caller trusts, and documentation that points at the canonical template instead of duplicating it.
+
+### What I did
+
+Fetched the five unresolved review threads via GraphQL, presented each with an assessment, replied and resolved each after Markus's decision. Outcomes: (1) `go-version` input dropped, `stable` hardcoded, inputs table removed — govulncheck should scan with the newest toolchain and no repo needs otherwise; (2)–(4) `/.github/workflows/ci.yml` deleted entirely — the `concurrency` question was moot for a plain workflow, and Markus does not want `rhysd/actionlint`, a third-party tool, in this repository; callers are the integration test; (5) the inline caller file in `/README.md` replaced by a link to a starter workflow at `maragudk/.github/workflow-templates/security.yml`, created in a separate PR with a `security.properties.json` (`$default-branch` placeholders in the triggers, `filePatterns: ["go.mod$"]`, Go category), so the template shows up in every repository's New workflow picker and there is one copy of the caller. Rewrote `/README.md` to one paragraph per concern. A prior codex second opinion (`gpt-5.6-sol`, xhigh, `codex exec review --uncommitted`) had found no functional defects and one P3 — a callee comment stating a caller requirement as fact — which was fixed before the PR was opened.
+
+### Why
+
+Each removal takes a maintenance surface out of the one repository whose `main` runs with `issues: write` in every caller. The starter workflow is the GitHub-native home for a copy-once caller file; the README linking to it means the caller has exactly one canonical form.
+
+### What worked
+
+Triage before touching code kept the five comments from turning into five commits; three of them collapsed into a single deletion.
+
+### What didn't work
+
+Nothing failed. `actionlint` is no longer run in CI; it is still useful locally before pushing.
+
+### What I learned
+
+For a reusable-workflow repo, the repo's own CI has little to check without a third-party linter; the callers' runs are the real validation.
+
+### What was tricky
+
+Comment 5 pulled in a second repository (`maragudk/.github`, which had no `workflow-templates/` directory) and the question of where the single copy of the caller lives; the answer is the template, with the README carrying only the contract.
+
+### What warrants review
+
+`/.github/workflows/security.yml` has no `inputs:` and no `permissions:`; `/.github/workflows/ci.yml` is gone; `/README.md` links to the template. In `maragudk/.github`: `workflow-templates/security.yml` uses `$default-branch` in the triggers and calls `maragudk/workflows/.github/workflows/security.yml@main`; `security.properties.json` is valid JSON with the documented keys.
+
+### Future work
+
+Convert `gai`, `glue` and `app` to callers using the template; `gomponents` as a new adopter. Job-sized reusable CI workflows (`test`, `lint`) as recorded in Step 1's future work.
