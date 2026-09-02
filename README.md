@@ -2,11 +2,7 @@
 
 Reusable GitHub Actions workflows.
 
-## Security
-
-Runs `govulncheck` on the calling repository. On a failed run on `main` it opens one GitHub issue labelled `govulncheck`, leaving it alone if one is already open, and closes it on the next green run on `main`.
-
-Use the [Security starter workflow](https://github.com/maragudk/.github/blob/main/workflow-templates/security.yml) to call it.
+Call them through the [starter workflows](https://github.com/maragudk/.github/tree/main/workflow-templates) in the `.github` repository.
 
 Made with ✨sparkles✨ by [maragu](https://www.maragu.dev/): independent software consulting for cloud-native Go apps & AI engineering.
 

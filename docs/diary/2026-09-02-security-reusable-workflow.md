@@ -237,3 +237,45 @@ Nothing.
 ### Future work
 
 Unchanged from Step 3.
+
+## Step 5: Third review round on PR #2
+
+**Author:** main
+
+### Prompt Context
+
+**Verbatim prompt:** `/fabrik:address-code-review`, then "yes", "Any other action-lint related changes?", "yes on comment 2"
+**Interpretation:** Two more comments: remove the last actionlint artefact (a shellcheck directive), and make the README a generic pointer to all starter workflows rather than a Security-specific one.
+**Inferred intent:** Nothing in the repo should exist for a tool the repo no longer uses, and the README should not need editing when the second workflow arrives.
+
+### What I did
+
+Removed the `# shellcheck disable=SC2016` directive and its explanatory comment from `/.github/workflows/security.yml`; a grep confirmed no other actionlint or shellcheck references remain outside this diary. Replaced the README's Security section with a single link to the `workflow-templates/` directory of `maragudk/.github`, so the README is two sentences and stays correct as workflows are added.
+
+### Why
+
+The directive existed only to keep actionlint green, and actionlint left the repo in Step 3. A per-workflow README section would have to be maintained in lockstep with the template directory; a link to the directory cannot drift.
+
+### What worked
+
+Asking "any other actionlint-related changes?" was answered by a grep rather than memory.
+
+### What didn't work
+
+Nothing failed.
+
+### What I learned
+
+Nothing new.
+
+### What was tricky
+
+Nothing.
+
+### What warrants review
+
+`/.github/workflows/security.yml`: shell block has no directives; `/README.md`: two sentences plus footer.
+
+### Future work
+
+Unchanged from Step 3.

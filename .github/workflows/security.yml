@@ -38,8 +38,6 @@ jobs:
             echo "Issue #$existing is already open for vulnerabilities, leaving it alone."
             exit 0
           fi
-          # The backticks below are Markdown for the issue body, not command substitution.
-          # shellcheck disable=SC2016
           printf -v body 'The `Security` workflow failed: %s\n\nRun `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` locally to see the vulnerabilities, then upgrade the affected dependencies.' "$RUN_URL"
           gh issue create --title "govulncheck found vulnerabilities" --label "$LABEL" --body "$body"
 
