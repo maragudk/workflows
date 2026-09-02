@@ -3,9 +3,9 @@ name: Security
 on:
   workflow_call:
 
-# No permissions block: a called workflow that requests more than the caller's
+# Callers must grant contents: read and issues: write. There is no permissions
+# block here because a called workflow that requests more than the caller's
 # effective grant fails validation outright, which would break fork pull requests.
-# Permissions are inherited from the caller; see the README for what it must grant.
 
 jobs:
   govulncheck:

@@ -195,3 +195,45 @@ Comment 5 pulled in a second repository (`maragudk/.github`, which had no `workf
 ### Future work
 
 Convert `gai`, `glue` and `app` to callers using the template; `gomponents` as a new adopter. Job-sized reusable CI workflows (`test`, `lint`) as recorded in Step 1's future work.
+
+## Step 4: Second review round on PR #2
+
+**Author:** main
+
+### Prompt Context
+
+**Verbatim prompt:** `/fabrik:address-code-review`, then "apply", "yes", "yes"
+**Interpretation:** Three more inline comments on PR #2, all pushing the same direction as the first round: fewer words, one canonical location for each fact.
+**Inferred intent:** The README should be a signpost, not a manual; the workflow file should be self-explanatory to whoever opens it while debugging.
+
+### What I did
+
+Triaged three comments one at a time, replied and resolved each. Outcomes: the required caller permissions are now stated in the workflow file's own comment instead of via a README pointer; the README intro is the single line "Reusable GitHub Actions workflows."; the Security section is one descriptive sentence plus a single link to the starter workflow in `maragudk/.github`, with the caller-rules bullet list removed so nothing is duplicated between the two repositories. Corrected one path in the discussion: starter workflows live at `workflow-templates/` in the root of the `.github` repository, not `.github/.github/workflows/`.
+
+### Why
+
+Every duplicated fact between the README, the workflow comment, and the template is a future drift; after this round each fact has exactly one home.
+
+### What worked
+
+Comment 1 (document permissions in the workflow) made comment 3 (drop the README rules) free, since the rationale had somewhere to go.
+
+### What didn't work
+
+Nothing failed.
+
+### What I learned
+
+Nothing new.
+
+### What was tricky
+
+Nothing.
+
+### What warrants review
+
+`/README.md` is four lines of content; `/.github/workflows/security.yml`'s header comment names the two required grants.
+
+### Future work
+
+Unchanged from Step 3.
