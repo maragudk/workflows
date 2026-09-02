@@ -129,3 +129,45 @@ Deciding not to fix the cache-scope finding: it is a real improvement, but not a
 ### Future work
 
 `scope=` on the build cache legs if eviction is observed; a services and secrets story before the repositories that need them can convert test/compatibility.
+
+## Step 4: Address Markus's review of PR #3
+
+**Author:** main
+
+### Prompt Context
+
+**Verbatim prompt:** `/fabrik:second-opinion` then `/fabrik:address-code-review`; per comment: "Agree, and file an issue in the workflows repo to follow up"; "yes"; "yes"; "yes"; "yes, also existing workflow not part of this PR"; "yes"; "yes"; "ok"
+**Interpretation:** Eight inline comments, all but two asking to delete explanatory comments from the workflow files; one about runner images; one raising the go.mod-vs-stable Go version question.
+**Inferred intent:** Workflow files should be code, not prose — the reasoning lives in the decision record — and open questions become issues rather than in-PR debates.
+
+### What I did
+
+Ran `codex exec review --base main` (gpt-5.6-sol, xhigh) on both this PR and `maragudk/.github#2` first: no actionable findings on either. Then triaged the eight comments one at a time, replying to and resolving each. Outcomes: runners stay `ubuntu-24.04`/`-arm` because `ubuntu-26.04` is still marked preview in `actions/runner-images` (follow-up issue #4); all six header comments — the five new files and `security.yml`, which Markus asked to include — trimmed to the single sentence naming the caller's required grants; the three `context: .` comments, `cd.yml`'s second header paragraph about default-branch-only calls, and `lint.yml`'s dependabot-guard comment deleted; the go.mod-versus-stable question filed as issue #5 with the trade-off written out, no change. Applied the deletions with one script over `.github/workflows/*.yml`, re-ran actionlint locally (exit 0).
+
+### Why
+
+Every deleted comment restated something the decision record or the code already says; the two questions that were not about comments are real and belong in issues with room for discussion.
+
+### What worked
+
+The one-at-a-time triage made eight comments take eight short exchanges; most were a single word each way.
+
+### What didn't work
+
+Nothing failed.
+
+### What I learned
+
+Nothing new.
+
+### What was tricky
+
+Nothing.
+
+### What warrants review
+
+The six files' header comments are one sentence each and otherwise the files contain no comments; issues #4 and #5 exist.
+
+### Future work
+
+Issues #4 (Ubuntu 26.04 runners) and #5 (Go version policy for CI).

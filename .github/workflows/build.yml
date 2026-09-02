@@ -3,9 +3,7 @@ name: Build
 on:
   workflow_call:
 
-# Callers must grant contents: read. There is no permissions block here because
-# a called workflow can only narrow the caller's grant, never widen it, so
-# permissions are the caller's to declare.
+# Callers must grant contents: read.
 
 jobs:
   build-arm64:
@@ -23,7 +21,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           push: false
-          # Build the workspace, like cd.yml does; the default Git-URL context drops .git.
           context: .
           platforms: linux/arm64
           cache-from: type=gha
@@ -44,7 +41,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           push: false
-          # Build the workspace, like cd.yml does; the default Git-URL context drops .git.
           context: .
           platforms: linux/amd64
           cache-from: type=gha

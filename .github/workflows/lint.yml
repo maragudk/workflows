@@ -3,15 +3,11 @@ name: Lint
 on:
   workflow_call:
 
-# Callers must grant contents: read. There is no permissions block here because
-# a called workflow can only narrow the caller's grant, never widen it, so
-# permissions are the caller's to declare.
+# Callers must grant contents: read.
 
 jobs:
   lint:
     runs-on: ubuntu-latest
-    # Dependabot pull requests only move dependency versions, so linting them is noise.
-    # The job then reports as skipped, which cascade-skips any caller job that needs it.
     if: ${{ github.triggering_actor != 'dependabot[bot]' }}
 
     steps:

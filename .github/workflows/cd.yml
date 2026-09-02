@@ -3,13 +3,7 @@ name: CD
 on:
   workflow_call:
 
-# Callers must grant contents: read and packages: write. There is no permissions
-# block here because a called workflow can only narrow the caller's grant, never
-# widen it, so permissions are the caller's to declare.
-#
-# Callers must also only call this on a push to the default branch: it pushes the
-# latest tag unconditionally, and on a pull request github.sha is the ephemeral
-# merge commit, which would tag an image with a commit that is not in the repository.
+# Callers must grant contents: read and packages: write.
 
 jobs:
   publish:
@@ -34,8 +28,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           push: true
-          # Build the checked-out workspace, which keeps .git so go build can stamp
-          # vcs.revision; the default Git-URL context drops it.
           context: .
           platforms: linux/amd64
           tags: |

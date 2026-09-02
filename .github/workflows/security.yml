@@ -3,9 +3,7 @@ name: Security
 on:
   workflow_call:
 
-# Callers must grant contents: read and issues: write. There is no permissions
-# block here because a called workflow that requests more than the caller's
-# effective grant fails validation outright, which would break fork pull requests.
+# Callers must grant contents: read and issues: write.
 
 jobs:
   govulncheck:
