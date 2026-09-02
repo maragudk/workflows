@@ -213,3 +213,45 @@ The two `go test` lines; gai's inline test job is unchanged and does not use `-r
 ### Future work
 
 Consider `-race` for gai's inline test job when its secrets story is settled.
+
+## Step 6: Add the `go mod tidy` drift check
+
+**Author:** main
+
+### Prompt Context
+
+**Verbatim prompt:** "Any other good useful default test flags?" then "Yes, add the tidy check"
+**Interpretation:** Of the candidate defaults discussed, only the tidy check earned its place; add it to the shared test workflow.
+**Inferred intent:** Catch untidy `go.mod`/`go.sum` in CI across every caller, as a default rather than per repository.
+
+### What I did
+
+Added a step `go mod tidy && git diff --exit-code go.mod go.sum` to `/.github/workflows/test.yml` between setup-go and build; not to `compatibility.yml`, whose `latest` leg runs `go get -u -t ./...` and so is untidy by design. Chose the `git diff` form over `go mod tidy -diff` (Go 1.23+) so callers whose go.mod declares an older Go still work. Recorded in `/docs/decisions.md`. Declined the other candidates discussed: `-count=1` is redundant because `-shuffle` disables test caching; `-failfast` hides failures; `-v` is noise; coverage flags need an uploader; `-timeout`, `-short`, `-p 1`, `-cpu` are repository-specific.
+
+### Why
+
+`-mod=readonly` rejects a go.mod missing requirements but not one carrying stale ones; the tidy check closes that gap and costs seconds.
+
+### What worked
+
+Nothing to report beyond the change itself.
+
+### What didn't work
+
+Nothing failed.
+
+### What I learned
+
+`go mod tidy -diff` is the cleaner form but only exists from Go 1.23, which matters for a shared workflow whose callers' toolchain follows their own go.mod.
+
+### What was tricky
+
+Nothing.
+
+### What warrants review
+
+The new step's placement (before build, so an untidy module fails fast) and its absence from `compatibility.yml`.
+
+### Future work
+
+None new.

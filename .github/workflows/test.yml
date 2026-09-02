@@ -19,6 +19,9 @@ jobs:
           go-version-file: go.mod
           check-latest: true
 
+      - name: Check that go.mod and go.sum are tidy
+        run: go mod tidy && git diff --exit-code go.mod go.sum
+
       - name: Build
         run: go build ./...
 
