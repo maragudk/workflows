@@ -1,0 +1,45 @@
+name: CD
+
+on:
+  workflow_call:
+
+# Callers must grant contents: read and packages: write. There is no permissions
+# block here because a called workflow can only narrow the caller's grant, never
+# widen it, so permissions are the caller's to declare.
+#
+# Callers must also only call this on a push to the default branch: it pushes the
+# latest tag unconditionally, and on a pull request github.sha is the ephemeral
+# merge commit, which would tag an image with a commit that is not in the repository.
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Login to GHCR container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          push: true
+          # Build the checked-out workspace, which keeps .git so go build can stamp
+          # vcs.revision; the default Git-URL context drops it.
+          context: .
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

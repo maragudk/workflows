@@ -1,0 +1,28 @@
+name: Test
+
+on:
+  workflow_call:
+
+# Callers must grant contents: read. There is no permissions block here because
+# a called workflow can only narrow the caller's grant, never widen it, so
+# permissions are the caller's to declare.
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -shuffle on ./...
