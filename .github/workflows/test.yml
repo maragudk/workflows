@@ -2,12 +2,35 @@ name: Test
 
 on:
   workflow_call:
+    inputs:
+      s3:
+        description: >
+          Start a versitygw S3 service container, reachable at http://localhost:7072
+          with access key "access", secret key "secretsecret", and path-style addressing.
+          Tests must use those values directly, because a called workflow inherits neither
+          the caller's env nor its secrets.
+        type: boolean
+        default: false
 
 # Callers must grant contents: read.
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      versitygw:
+        # An empty image means no service container, so this only starts when s3 is true.
+        # The comparisons make a caller passing the string "false" turn it off too.
+        image: ${{ (inputs.s3 == true || inputs.s3 == 'true') && 'versity/versitygw:latest' || '' }}
+        ports:
+          - "7072:7070"
+        env:
+          # Fixed throwaway credentials for a container that only the job can reach.
+          ROOT_ACCESS_KEY: "access"
+          ROOT_SECRET_KEY: "secretsecret"
+          VGW_BACKEND: "posix"
+          VGW_BACKEND_ARG: "/var/lib"
 
     steps:
       - uses: actions/checkout@v7
@@ -23,7 +46,7 @@ jobs:
         run: go mod tidy && git diff --exit-code go.mod go.sum
 
       - name: Build
-        run: go build ./...
+        run: go build -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
 
       - name: Test
-        run: go test -race -shuffle on ./...
+        run: go test -race -shuffle on -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
