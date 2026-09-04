@@ -3,6 +3,14 @@ name: Test
 on:
   workflow_call:
     inputs:
+      postgres:
+        description: >
+          Start a PostgreSQL 18 service container, reachable at
+          "postgres://test:test@localhost:5433/postgres", with superuser "test", password "test",
+          and the databases "postgres" and "template1". Tests must use those values directly,
+          because a called workflow inherits neither the caller's env nor its secrets.
+        type: boolean
+        default: false
       s3:
         description: >
           Start a versitygw S3 service container, reachable at http://localhost:7072
@@ -19,6 +27,25 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      postgres:
+        # An empty image means no service container, so this only starts when postgres is true.
+        # The comparisons make a caller passing the string "false" turn it off too.
+        image: ${{ (inputs.postgres == true || inputs.postgres == 'true') && 'postgres:18' || '' }}
+        ports:
+          - "5433:5432"
+        env:
+          # Fixed throwaway credentials for a container that only the job can reach.
+          POSTGRES_USER: "test"
+          POSTGRES_PASSWORD: "test"
+          POSTGRES_DB: "template1"
+        # The image declares no HEALTHCHECK, so give it one: the runner then waits for
+        # Postgres to accept connections before the first step runs.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
       versitygw:
         # An empty image means no service container, so this only starts when s3 is true.
         # The comparisons make a caller passing the string "false" turn it off too.
