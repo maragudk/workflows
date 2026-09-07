@@ -19,8 +19,18 @@ on:
           the caller's env nor its secrets.
         type: boolean
         default: false
+      secret-env:
+        description: >
+          Names of secrets, separated by whitespace or newlines, to export under the same
+          names into the environment of the steps that follow, which is the test run. The
+          caller must pass "secrets: inherit", because a called workflow inherits neither
+          the caller's env nor its secrets. A listed name with no secret behind it is left
+          unset, with a warning, so a test that skips on a missing key still skips, as it
+          does on a pull request from a fork. Nothing but the listed names is exported.
+        type: string
+        default: ""
 
-# Callers must grant contents: read.
+# Callers must grant contents: read, and pass secrets: inherit to use secret-env.
 
 jobs:
   test:
@@ -74,6 +84,41 @@ jobs:
 
       - name: Build
         run: go build -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
+
+      - name: Export secrets to the environment
+        if: inputs.secret-env != ''
+        env:
+          NAMES: ${{ inputs.secret-env }}
+        run: |
+          # The whole secrets context can exceed the 128 KiB cap on a single environment
+          # string, so it travels in this script rather than in env: above.
+          f="$RUNNER_TEMP/secret-env.json"
+          trap 'rm -f "$f"' EXIT
+          cat >"$f" <<'SECRETSJSON'
+          ${{ toJSON(secrets) }}
+          SECRETSJSON
+          # A heredoc so a multiline value survives, with an unguessable delimiter so a value
+          # containing it cannot close the heredoc early and inject further variables.
+          d="ghadelim$(openssl rand -hex 16)"
+          # Unquoted to split on whitespace and newlines; set -f so a name cannot be a glob
+          # that expands against the checkout and skips the check below.
+          set -f
+          for n in $NAMES; do
+            case "$n" in
+              [!A-Za-z_]* | *[!A-Za-z0-9_]*)
+                echo "secret-env: \"$n\" is not a valid environment variable name; separate names with spaces or newlines" >&2
+                exit 1
+                ;;
+            esac
+            if ! jq -e --arg n "$n" 'has($n)' "$f" >/dev/null; then
+              echo "::warning::secret-env: no secret named $n, so it is not exported"
+              continue
+            fi
+            { printf '%s<<%s\n' "$n" "$d"
+              jq -r --arg n "$n" '.[$n]' "$f"
+              printf '%s\n' "$d"
+            } >>"$GITHUB_ENV"
+          done
 
       - name: Test
         run: go test -race -shuffle on -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
