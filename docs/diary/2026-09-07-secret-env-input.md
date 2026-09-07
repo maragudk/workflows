@@ -355,3 +355,153 @@ caller would.
 ### Future work
 
 Unchanged from Step 1.
+
+## Step 3: A second review round, and the transport changes
+
+**Author:** fabrik:builder
+
+### Prompt Context
+
+**Verbatim prompt:**
+
+> Your git isolation is restored to the workflows checkout (the lead has left the c6 worktree); carry on in /Users/maragubot/Developer/workflows-secret-env on branch `secret-env-input`. Decisions on your three questions, plus one new finding:
+>
+> 1. Keep both hardenings: `set -f` and the `openssl rand -hex 16` delimiter.
+> 2. An absent secret is NOT exported (not exported empty). Keep the warning. Update the input description, the decision text and the diary to match.
+> 3. `compatibility.yml` does NOT get the input. Revert whatever you added there; only `test.yml` carries `secret-env`.
+> 4. New finding from an independent codex review of the branch: `env: ALL_SECRETS: ${{ toJSON(secrets) }}` puts the whole secrets context in one environment string, and Linux caps a single env string at MAX_ARG_STRLEN = 128 KiB. GitHub allows 48 KB per secret, so a caller with three large inherited secrets (repo + org) gets `Argument list too long` at step launch regardless of what `secret-env` lists. Fix: don't transport the JSON through `env:`; write it to a file under `$RUNNER_TEMP` from the script body instead (a `run:` script has no such limit), e.g. a quoted heredoc `cat > "$RUNNER_TEMP/secrets.json" <<'EOF'` with `${{ toJSON(secrets) }}` on the following lines — `toJSON` pretty-prints one key per line with values as JSON strings, so a bare `EOF` line cannot occur inside a value; confirm that reasoning yourself and add a local test with a value containing a literal "EOF" line. Then `jq` reads from the file. Delete the file after export. Say in the diary why the transport changed.
+>
+> Then: run your local test suite and actionlint, re-run the runner probe (confirm `openssl` and the file transport on a real runner), commit, push, refresh the PR body, and report back with the final PR state. Do not merge.
+
+**Interpretation:** Take all four rulings as given, verify the fourth's reasoning rather than
+apply it on faith, and re-prove the whole step on a runner now that both the transport and the
+absent-name semantics have changed.
+
+**Inferred intent:** The step should be correct for a caller with large secrets, not only for
+one with short API keys, and `compatibility.yml` should stop mirroring `test.yml` where the
+mirror is actively harmful.
+
+### What I did
+
+- **Reverted `compatibility.yml` to `main`.** Only `test.yml` carries `secret-env` now. The
+  harness gained two assertions that the file has neither the input nor the step, so the mirror
+  cannot come back by accident.
+- **An absent name is no longer exported.** `jq -e 'has($n)'` decides; a miss warns and
+  `continue`s. The input description, the decision entry and the reasoning all changed with it:
+  the old text defended the empty string by pointing at fork pull requests, and that was the
+  argument that undid it — a fork gets no secrets at all, so with the old behaviour every listed
+  name arrived set-but-empty and `if _, ok := os.LookupEnv(k); !ok { t.Skip() }` stopped
+  skipping. Leaving the name unset restores what a test sees when this input is not used.
+- **Moved the secrets context out of `env:`.** `ALL_SECRETS` is gone. The step now writes
+  `${{ toJSON(secrets) }}` into a file under `$RUNNER_TEMP` through a quoted heredoc in the
+  script body, `jq` reads the file, and `trap 'rm -f "$f"' EXIT` deletes it on every exit path,
+  the guard's `exit 1` included.
+- Kept `set -f` and the `openssl rand -hex 16` delimiter.
+
+### Why
+
+I checked the `env:` finding rather than taking it, and it holds exactly as stated. Locally it
+looked like a non-issue — macOS has no per-string cap, and 144 KiB in one variable works fine —
+so I put the question on the runner instead, in a plain `ubuntu-latest` job:
+
+```
+100 KiB: ok
+127 KiB: ok
+129 KiB: FAILS (argument list too long)
+144 KiB: FAILS (argument list too long)
+```
+
+That is `MAX_ARG_STRLEN`, 32 pages, on the nose. Three 48 KB secrets — repository plus
+organisation, which a caller does not choose — make `toJSON(secrets)` about 144 KB and the step
+would have died at launch before running a line, no matter what `secret-env` listed. The bug was
+invisible to every test I had written, because all of them used short values.
+
+The heredoc that carries the payload is safe for a reason worth stating, since it looks like the
+same delimiter-collision problem the export heredoc has: it is not, because JSON escapes
+newlines inside strings. A multiline secret is one physical line, `"KEY": "line1\nline2"`. So
+every line of the payload is `{`, `}`, or an indented `"key": "value"` pair, and a bare
+`SECRETSJSON` line cannot occur — not from a value, and not from a key, since a key always
+arrives quoted and indented. I asserted it rather than trusted it: the harness reads the
+terminator out of the workflow, feeds in a secret whose value contains that exact word on its
+own line, and checks both that the value survives intact and that the secret after it in the
+payload still arrives. Quoting the heredoc is what stops `$` in a value being expanded, and a
+mutant that unquotes it is caught.
+
+Only `test.yml` gets the input because `compatibility.yml`'s `deps: latest` legs run
+`go get -u -t ./...` and then execute third-party code that was upgraded seconds earlier, with
+the caller's API keys in the environment. That is a real difference in kind, not a lapse in
+consistency.
+
+### What worked
+
+Re-running the harness against a 147 KB payload took one line, and it passes — the same shape
+that breaks through `env:`. Putting the cap probe in the validation run as its own job means the
+premise is recorded as a measurement rather than as a citation.
+
+The `trap` covers the guard's `exit 1` path for free, which an `rm` at the end of the loop
+would not have.
+
+### What didn't work
+
+I destroyed my own uncommitted work and had to recover it. Wanting a clean tree before branching
+for the probe, I ran `git stash && git checkout -b secret-env-input-validation && git stash pop`,
+committed everything onto the throwaway branch — the real change included — and then deleted
+that branch with `git branch -D` as the cleanup step. `git status` came back clean, which is
+what a finished branch and an emptied branch look like alike. The tip hash was still in the
+scrollback, so `git checkout 4e1f4e0 -- .github/workflows/test.yml .github/workflows/compatibility.yml`
+brought it back, and the harness confirmed it. The lesson is narrow and sharp: commit the real
+change on its own branch *before* creating a throwaway one, never carry a working tree across.
+
+Earlier in the same step, every `Bash` call started failing with
+
+```
+This session is isolated in the worktree /Users/maragubot/Developer/c6v2/.claude/worktrees/merge-upstream, but this command's working directory resolved to the shared checkout (/Users/maragubot/Developer/c6v2). Refusing to run it there
+```
+
+because the lead had moved worktrees mid-task, and the isolation target moves with them. There
+is no fix from inside the sub-agent: the right move is to stop and report rather than commit
+somewhere else, which is what I did.
+
+### What I learned
+
+`MAX_ARG_STRLEN` is a per-string limit and is Linux-only; macOS enforces a total `ARG_MAX` but
+no per-variable cap. So a shell test on a development machine cannot see this class of bug at
+all, and a local harness that runs the real script under the real shell is still the wrong
+environment. Anything about process-launch limits has to be measured on the runner.
+
+`toJSON`'s pretty-printing is what makes a quoted heredoc a safe transport, and the property is
+JSON's rather than GitHub's — any conforming serializer escapes newlines in strings. That is
+worth knowing because it means the safety does not depend on a formatting detail that could
+change.
+
+### What was tricky
+
+Choosing the predicate for "no secret behind it". `has($n)` distinguishes absent from
+present-and-empty, and only absent now skips the export; a secret that exists with an empty
+value is exported empty, faithfully, and does not warn. That is a real behavioural seam and the
+warning no longer covers it, which is a deliberate narrowing from Step 2 — the warning's job is
+to catch a name that resolves to nothing, and an empty secret is a value the caller chose.
+
+### What warrants review
+
+The transport. It is the largest change in the branch and the least like the specified sketch,
+and the argument for its safety is the JSON-escaping property above — worth disagreeing with if
+you think it does not hold.
+
+After that, `test.yml` and `compatibility.yml` no longer mirror each other for the first time.
+The decision entry says why; if that reasoning is wrong, the fix is to add the input to
+`compatibility.yml` and it is a copy of one block.
+
+### Future work
+
+Unchanged from Step 1: the starter templates in `maragudk/.github` want a `secret-env:` example
+with `secrets: inherit` beside it.
+
+Four smaller things a reviewer flagged and I did not act on, recorded so they are not
+rediscovered: GitHub stores secret names uppercase, so `secret-env: my_key` never resolves and
+now warns rather than exporting an empty value; `secrets: inherit` does not carry *environment*
+secrets, because `on.workflow_call` has no `environment` keyword, so a caller whose keys live in
+a GitHub Environment gets warnings and nothing else; a secret name cannot begin with `GITHUB_`,
+so `secret-env: GITHUB_TOKEN` can never resolve, while lowercase `github_token` does and hands
+the job token to `go test`; and `NODE_OPTIONS` is on the runner's `$GITHUB_ENV` blocklist, so
+listing it logs a runner error and sets nothing.

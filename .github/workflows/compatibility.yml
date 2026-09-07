@@ -19,18 +19,8 @@ on:
           the caller's env nor its secrets.
         type: boolean
         default: false
-      secret-env:
-        description: >
-          Names of secrets, separated by whitespace or newlines, to export under the same
-          names into the environment of the steps that follow, which is the test run. The
-          caller must pass "secrets: inherit", because a called workflow inherits neither
-          the caller's env nor its secrets. A listed name with no secret behind it is
-          exported as an empty string, with a warning, which is what a pull request from a
-          fork sees anyway. Nothing but the listed names is exported at all.
-        type: string
-        default: ""
 
-# Callers must grant contents: read, and pass secrets: inherit to use secret-env.
+# Callers must grant contents: read.
 
 jobs:
   test:
@@ -92,30 +82,6 @@ jobs:
       - name: Update to latest deps
         if: matrix.deps == 'latest'
         run: go get -u -t ./...
-
-      - name: Export secrets to the environment
-        if: inputs.secret-env != ''
-        env:
-          ALL_SECRETS: ${{ toJSON(secrets) }}
-          NAMES: ${{ inputs.secret-env }}
-        run: |
-          # A heredoc, so a multiline value survives, with a random delimiter so a value
-          # containing it cannot close the heredoc early and inject further variables.
-          d="ghadelim$RANDOM$RANDOM"
-          for n in $NAMES; do
-            case "$n" in
-              [!A-Za-z_]* | *[!A-Za-z0-9_]*)
-                echo "secret-env: \"$n\" is not a valid environment variable name; separate names with spaces or newlines" >&2
-                exit 1
-                ;;
-            esac
-            jq -e --arg n "$n" 'has($n) and .[$n] != ""' <<<"$ALL_SECRETS" >/dev/null ||
-              echo "::warning::secret-env: no secret named $n, so it is exported empty"
-            { printf '%s<<%s\n' "$n" "$d"
-              jq -r --arg n "$n" '.[$n] // ""' <<<"$ALL_SECRETS"
-              printf '%s\n' "$d"
-            } >>"$GITHUB_ENV"
-          done
 
       - name: Test
         run: go test -race -shuffle on -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
