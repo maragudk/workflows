@@ -233,3 +233,125 @@ gets empty values and a confusing test failure. That is a change in another repo
 Nothing here warns a caller that set `secret-env` without `secrets: inherit`. It cannot be
 detected from inside the called workflow — `GITHUB_TOKEN` is present either way — so if it turns
 out to be a common mistake, the fix is a note in the starter template rather than a check here.
+
+## Step 2: Self-review, and what a reviewer found
+
+**Author:** fabrik:builder
+
+### Prompt Context
+
+**Verbatim prompt:** (no new prompt — the deliverable in Step 1 says "Self-review before opening the PR.")
+**Interpretation:** Read the diff as a reviewer would, then dispatch reviewers at deliberately
+different angles, apply the findings that survive checking, and record the ones that do not.
+**Inferred intent:** Catch the mistakes a change that ~24 repositories pin `@main` cannot afford
+to ship with.
+
+### What I did
+
+Read the diff, then dispatched two reviewers, one at correctness and secret leakage, one at
+operational consequences and house style. Four findings changed the code and two changed the
+decisions entry.
+
+- **The description overclaimed.** It said the secrets go into "the test step's environment".
+  `$GITHUB_ENV` sets variables for every step that follows, not one; that reads as true today
+  only because `Test` happens to be last in both files. Reworded to "the environment of the
+  steps that follow, which is the test run", which stays true if a coverage upload is ever added
+  after `Test` — and makes it visible that such a step would inherit the secrets.
+- **The caller obligation was in the wrong place.** Every workflow here carries a top-of-file
+  `# Callers must grant …` comment; `secrets: inherit` is an obligation of exactly that kind and
+  was buried in an input description. The comment in both files now reads
+  `# Callers must grant contents: read, and pass secrets: inherit to use secret-env.`
+- **The one comment explained the wrong half.** It read "A random heredoc delimiter, so multiline
+  secrets such as private keys survive" — but multiline values survive because it is a heredoc at
+  all. The randomness is there for a reason a reader cannot derive from the code: a value
+  containing a line equal to the delimiter closes the heredoc early, and its remaining lines are
+  then read as further assignments. That is variable injection out of a secret's own contents.
+  The comment now says that, and drops "such as private keys", which was this repository
+  guessing at what a particular caller keeps in its secrets.
+- **The step was loud about the rare mistake and silent about the likely ones.** The guard fails
+  a malformed name, but a name that simply resolves to nothing exported an empty string with no
+  signal — and four different caller errors land there: a forgotten `secrets: inherit`, a
+  mis-cased name (`toJSON(secrets)` keys are uppercase), a genuinely empty secret, and a fork
+  pull request. Only the last is legitimate. Two lines now log
+  `::warning::secret-env: no secret named $n, so it is exported empty`, naming it; secret names
+  are not secret, and the semantics the description promises are unchanged.
+
+The decisions entry gained the concession it was glossing over — `secrets: inherit` means a
+reader of a caller's `ci.yml` can no longer see which secrets cross the boundary, which is
+exactly the "explicit declarations keep the surface auditable" half of the 2026-09-02 rejection
+— and a note that `GITHUB_TOKEN` is in the context and therefore exportable by name.
+
+Then re-ran everything: 22 assertions green, the edge-case pass (48 KB value, PEM, non-ASCII,
+tabs, backslashes, shell metacharacters, the literal strings `"null"` and `"false"`, a value
+ending in a newline) byte-exact, and `actionlint` clean.
+
+### Why
+
+The reviewers were pointed at different angles rather than both at "review this", which is what
+produced the split: the operational reviewer found the `$GITHUB_ENV` scope overclaim and the
+misplaced caller obligation by reading the other four workflows for convention, neither of which
+is visible from the diff alone.
+
+The warning was the finding worth the most. It is two lines, it has no ongoing cost, and it
+turns the single most likely misconfiguration — a caller who adds `secret-env:` and forgets
+`secrets: inherit`, which the runner validation in Step 1 showed is undetectable from inside the
+called workflow — from a silent empty string into a line in the log.
+
+### What didn't work
+
+Nothing regressed. The one thing worth recording is a limit of the mutation testing rather than
+a failure: after the warning landed, weakening the name guard no longer breaks the assertion
+that the error names the offending input, because the warning names it too. The guard is still
+covered by the assertion that a malformed name fails the step, but the two checks now overlap,
+and that overlap is an argument for the reviewer's position that the warning subsumes part of
+the guard.
+
+Also worth naming: two of the reviewer's three "major" findings — that no decision or diary
+entry existed, and that there was no evidence the workflow had ever been run — were artefacts of
+reviewing a mid-flight branch. Both existed by the time the report arrived. That is a cost of
+dispatching a reviewer before the docs commit, not a finding.
+
+### What I learned
+
+`toJSON(secrets)` keys are the stored names, which GitHub uppercases, so `secret-env: my_api_key`
+resolves to nothing while passing every validity check the step makes. That case is why the
+warning had to key on "resolved to nothing" rather than on name shape — no amount of syntactic
+checking would have caught it.
+
+An error message and a warning covering overlapping ground is easy to arrive at accidentally and
+shows up as mutants that stop biting. Mutation testing is as useful for spotting redundant checks
+as for spotting missing ones.
+
+### What was tricky
+
+Deciding what not to take. Four findings were real and were left alone deliberately:
+
+- **`set -f` before the loop.** Recorded in Step 1 and unchanged: a name containing a glob
+  character expands against the checkout first. The reviewer reached the same conclusion — the
+  accident is benign — so it stays a known sharp edge rather than a line of shell.
+- **A sentence saying a listed name overrides an environment variable of the same name.** True
+  — a secret named `GOFLAGS` or `PATH` would quietly change how `go test` runs — but the
+  description is already the longest of the three in the file, and "exported under the same
+  names" says it. A denylist was rejected by the reviewer too.
+- **Trimming the guard's error message,** which repeats the description's "separated by
+  whitespace or newlines". It is duplication, but an error message a caller reads at 5pm should
+  carry its own fix rather than send them back to the input docs.
+- **Comments on the `if:` gate and the `case` guard.** The gate is worth understanding — a
+  skipped step's `env:` is never evaluated, so it is what keeps `toJSON(secrets)` from
+  materialising for the callers that do not use this — but `security.yml` carries twenty lines
+  of comparable shell with no comments at all, and the step now has one comment where it had
+  one. Adding two more would be the comment volume this repository has trimmed before.
+
+### What warrants review
+
+Unchanged from Step 1: the guard and the warning are the two things in the step that were not in
+the specified design, and they are now deliberately overlapping. If only one is wanted, the
+warning is the one that covers more ground; the guard is what stops a malformed line reaching a
+file the runner parses.
+
+The reworded input description is the whole user-facing contract and is worth reading as a
+caller would.
+
+### Future work
+
+Unchanged from Step 1.
