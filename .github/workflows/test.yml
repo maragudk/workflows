@@ -3,6 +3,13 @@ name: Test
 on:
   workflow_call:
     inputs:
+      compose:
+        description: >
+          Run "docker compose up --wait" on the caller's compose file before the tests, for
+          dependencies a service container can't express. Fails if a service isn't healthy
+          within five minutes. Starts before secret-env is exported.
+        type: boolean
+        default: false
       postgres:
         description: >
           Start a PostgreSQL 18 service container, reachable at
@@ -85,6 +92,14 @@ jobs:
       - name: Build
         run: go build -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
 
+      - name: Start the compose stack
+        id: compose
+        # The comparisons make a caller passing the string "false" turn it off too.
+        if: inputs.compose == true || inputs.compose == 'true'
+        run: |
+          docker compose up --wait --wait-timeout 300
+          docker compose ps
+
       - name: Export secrets to the environment
         if: inputs.secret-env != ''
         env:
@@ -122,3 +137,10 @@ jobs:
 
       - name: Test
         run: go test -race -shuffle on -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
+
+      - name: Show compose state and logs
+        # Only when the stack was started, whether or not it came up.
+        if: failure() && steps.compose.outcome != 'skipped'
+        run: |
+          docker compose ps --all
+          docker compose logs
