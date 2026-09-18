@@ -196,3 +196,60 @@ a build failure never pays for either.
 - A teardown step if the workflow ever runs on a self-hosted runner.
 - Overlap the Chromium download with the compose build (`docker compose up -d` before the playwright step, `docker compose up --wait` after) if the serial wall time turns out to matter.
 - `-mod=mod` on the playwright step, if a playwright-go release ever gives `cmd/playwright` a dependency of its own.
+
+## Step 2: Drop the `playwright` input and trim the `compose` prose after review
+
+**Author:** workflows-builder
+
+### Prompt Context
+
+**Verbatim prompt:**
+
+> Review outcome on workflows PR #9, both threads triaged with Markus; apply as one commit on the same branch and push:
+>
+> 1. Remove the `playwright` input and its install step entirely (the consuming project will use chromedp with the Chrome preinstalled on ubuntu-latest, so no browser install is needed). Remove the corresponding text from the decisions entry and add a line in the diary saying why it was dropped (community binding + runtime Node driver download vs. chromedp with system Chrome). Make sure the decisions entry only argues what's actually shipped.
+> 2. Make the `compose` input description and the step comments concise: a few sentences, no diary-level detail. Suggested description: "Run `docker compose up --wait` on the caller's compose file before the tests, for dependencies a service container can't express. Fails if a service isn't healthy within five minutes. Starts before secret-env is exported." Keep the existing inputs' descriptions as they are. Trim the step comments to one line each; keep the `"false"`-string comparison comment since it's load-bearing.
+> 3. Update the PR title/body to match (compose input only). actionlint + YAML parse again. Report the new commit hash.
+
+**Interpretation:** Ship only the `compose` input, in the terse register the other inputs use, and leave the playwright investigation as history in this diary rather than as a contract in the workflow.
+
+**Inferred intent:** The browser question has been settled on the consuming side — chromedp against the Chrome that `ubuntu-latest` already ships — so a step that downloads a Node driver at run time for a community binding is machinery nobody will call.
+
+### What I did
+
+In `/.github/workflows/test.yml`: removed the `playwright` input and the `Install Chromium for Playwright` step; replaced the `compose` description with the suggested three sentences, quoting the command with double quotes as the `postgres` and `s3` descriptions do; cut the comment on `Show compose state and logs` to one line. The `"false"`-string comparison comment on the compose step stays. The steps and commands are otherwise as Step 1 left them.
+
+In `/docs/decisions.md`: retitled the 2026-09-18 entry to the `compose` input alone, dropped the two playwright bullets and the playwright items from the rejected list, and added one rejected item recording that the input was carried and dropped, and why.
+
+PR #9's title and body updated to describe only the `compose` input. `actionlint` (via `go run`, v1.7.12) and a YAML parse both clean.
+
+### Why
+
+The `playwright` input was dropped because the consuming project chose chromedp with the system Chrome on `ubuntu-latest` over playwright-go. The trade is a community-maintained binding that downloads a Node.js driver at run time — with the module-path rename and the dead CDN for older releases that Step 1 ran into — against a Go-native library that talks to a browser the runner already has, so there is nothing for the workflow to install. A shared workflow should not carry an input whose only consumer went another way.
+
+The prose was trimmed because the other inputs' descriptions state the contract in three or four sentences and let the decisions entry carry the argument; Step 1's description had drifted into explaining itself.
+
+### What worked
+
+The playwright removal was a clean cut: the step had no `id`, nothing referenced it, and the `compose` steps were already independent of it.
+
+### What didn't work
+
+Nothing failed in this step.
+
+### What I learned
+
+The Step 1 investigation was still worth doing: the rename and the dead driver CDN are the concrete reasons a runtime-driver binding is a liability in a shared workflow, and they are what made the chromedp decision easy to argue.
+
+### What was tricky
+
+Only the quoting of the suggested description: the coordinator's text used backticks around the command, the file's existing descriptions use double quotes, and "keep the existing inputs' descriptions as they are" argues for matching them rather than introducing a second style.
+
+### What warrants review
+
+- `/.github/workflows/test.yml`: the new `compose` description, and that nothing playwright-related remains.
+- `/docs/decisions.md`: the entry now argues only what ships; the playwright drop is one rejected item.
+
+### Future work
+
+- Unchanged from Step 1 for compose: `compatibility.yml` mirroring, a `compose-file` input, a teardown step on self-hosted runners.

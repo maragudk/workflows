@@ -5,25 +5,9 @@ on:
     inputs:
       compose:
         description: >
-          Run "docker compose up --wait" in the checkout before the tests, so whatever compose
-          file the caller has at the repository root (compose.yaml, docker-compose.yml and
-          their variants, found by compose's own resolution) provides what a service container
-          cannot: several containers, depends_on gated on healthchecks, a build from a git URL.
-          The job fails if a service never becomes running, or healthy when it has a
-          healthcheck, or if that takes more than five minutes. The stack starts before
-          secret-env is exported, so the compose file sees no secrets. Published ports must not
-          collide with the host ports the postgres and s3 service containers publish. Compose
-          state and logs are printed when the job fails.
-        type: boolean
-        default: false
-      playwright:
-        description: >
-          Install Chromium and its system packages for playwright-go before the tests. The
-          playwright CLI is run from the caller's go.mod, so the driver matches the module
-          version. Requires github.com/mxschmitt/playwright-go v0.6100.0 or newer: older
-          releases, under the module path github.com/playwright-community/playwright-go,
-          download their driver from a CDN that no longer serves it. The browser is downloaded
-          on every run, not cached.
+          Run "docker compose up --wait" on the caller's compose file before the tests, for
+          dependencies a service container can't express. Fails if a service isn't healthy
+          within five minutes. Starts before secret-env is exported.
         type: boolean
         default: false
       postgres:
@@ -108,12 +92,6 @@ jobs:
       - name: Build
         run: go build -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
 
-      - name: Install Chromium for Playwright
-        # The comparisons make a caller passing the string "false" turn it off too.
-        if: inputs.playwright == true || inputs.playwright == 'true'
-        # go run without @version resolves the CLI to the version in the caller's go.mod.
-        run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps chromium
-
       - name: Start the compose stack
         id: compose
         # The comparisons make a caller passing the string "false" turn it off too.
@@ -161,8 +139,7 @@ jobs:
         run: go test -race -shuffle on -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
 
       - name: Show compose state and logs
-        # Only when the stack was started, whether or not it came up: a skipped step's outcome
-        # is "skipped", a failed "docker compose up" leaves the containers around to inspect.
+        # Only when the stack was started, whether or not it came up.
         if: failure() && steps.compose.outcome != 'skipped'
         run: |
           docker compose ps --all
