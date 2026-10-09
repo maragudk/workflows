@@ -3,6 +3,16 @@ name: Test
 on:
   workflow_call:
     inputs:
+      apt-packages:
+        description: >
+          Names of Debian packages, separated by whitespace or newlines, to install with
+          "apt-get install --no-install-recommends" on the runner before the tests, for tools
+          the tests shell out to, such as ffmpeg. Installs before compose starts. Each name
+          must look like a Debian package name, otherwise the job fails before anything is
+          installed. Recommended packages are not installed, so name any you need. Empty
+          means no apt step runs.
+        type: string
+        default: ""
       compose:
         description: >
           Run "docker compose up --wait" on the caller's compose file before the tests, for
@@ -91,6 +101,23 @@ jobs:
 
       - name: Build
         run: go build -tags sqlite_fts5,sqlite_math_functions,sqlite_foreign_keys ./...
+
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        env:
+          PACKAGES: ${{ inputs.apt-packages }}
+        run: |
+          # Unquoted to split on whitespace and newlines; set -f so a name cannot be a glob
+          # that expands against the checkout and skips the check below.
+          set -f
+          for p in $PACKAGES; do
+            if ! [[ "$p" =~ ^[a-z0-9][a-z0-9+.-]+$ ]]; then
+              echo "apt-packages: \"$p\" is not a valid Debian package name; separate names with spaces or newlines" >&2
+              exit 1
+            fi
+          done
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $PACKAGES
 
       - name: Start the compose stack
         id: compose
